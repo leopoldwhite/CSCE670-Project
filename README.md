@@ -18,30 +18,60 @@ We propose a SFT $\to$ RL pipeline:
 ### 1. Supervised Fine-tuning (SFT)
 The goal of the SFT stage is to teach the student model to perform **iterative reasoning and search actions**.
 *   **Model**: `Qwen2.5-3B-Instruct`
-*   **Data**: Multi-step trajectories with `<think>`, `<search>`, `<information>`, and `<answer>` tags.
+*   **Data**: Multi-step trajectories with `<think>`, `<search>`, `<information>`, and `<answer>` tags. The dataset is derived from [Chain-of-Agents (OPPO AI Agent Team, 2025)](https://arxiv.org/pdf/2508.13167).
 *   **Training**: LoRA fine-tuning using `LLaMA-Factory`.
 
 ### 2. Reinforcement Learning (RL)
-We use the **Search-R1** framework built on VeRL.
+We use the **Search-R1** framework built on VeRL on the Natural Questions (NQ) dataset (train split).
+
 *   **Objective**: Optimize the decision policy (when to search, how long, when to stop).
 *   **Algorithm**: PPO (Proximal Policy Optimization).
-*   **Dataset**: Natural Questions (NQ) train split.
-*   **Environment**: Multi-step retrieval-augmented environment.
+*   **Reward Signal**: Outcome-based (Exact Match).
+*   **Retriever**: Local retrieval service, Top-K = 3.
 
-## Results
+#### Hyperparameters
+The specific hyperparameters used for the PPO training run in `train_ppo.sh` are:
 
-We evaluated our approach on the Natural Questions (NQ) test split.
+| Parameter | Value | Description |
+| :--- | :--- | :--- |
+| **Total Training Steps** | 600 | Total update steps |
+| **Batch Size** | 32 | Global training batch size |
+| **Mini-batch Size** | 32 | PPO mini-batch size |
+| **Learning Rate (Actor)** | 1e-6 | LR for the policy model |
+| **Learning Rate (Critic)** | 1e-5 | LR for the value model |
+| **KL Coefficient** | 0.001 | Penalty for deviation from reference model |
+| **Max Turns (Train)** | 2 | Max agent-environment interaction turns during training |
+| **Max Prompt Length** | 4096 | Context window limit |
+| **Max Response Length** | 500 | Max tokens per generation |
+
+## Evaluation and Results
+
+We evaluated our approach on the **NQ-Test** split using the `infer.py` script.
+
+### Evaluation Parameters
+
+| Parameter | Value | Note |
+| :--- | :--- | :--- |
+| **Temperature** | 0.7 | Sampling temperature |
+| **Top-P** | 0.9 | Nucleus sampling |
+| **Max Turns (Eval)** | 5 | Allowed turns for search/reasoning (Higher than training) |
+| **Retrieval Top-K** | 3 | Documents retrieved per query |
+| **Max New Tokens** | 1024 | Generation limit |
+
+### Quantitative Results
 
 | Group | Configuration | EM | ROUGE-L |
 | :--- | :--- | :--- | :--- |
-| 1 | Baseline (no SFT, no RL) | 0.2374 | 0.3179 |
-| 2 | SFT Only | 0.3654 | 0.4515 |
-| 3 | RL Only | 0.3108 | 0.3906 |
+| 1 | **Baseline** (No SFT, No RL) | 0.2374 | 0.3179 |
+| 2 | **SFT Only** | 0.3654 | 0.4515 |
+| 3 | **RL Only*** | 0.3108 | 0.3906 |
 | 4 | **SFT + RL (Ours)** | **0.4127** | **0.4890** |
 
-**Key Findings**:
-*   **SFT Only** significantly outperforms the baseline and RL-only approaches, highlighting the importance of process priors.
-*   **SFT + RL** achieves the best performance, demonstrating that RL effectively refines the behaviors established during SFT.
+**\*Note on RL Only**: This baseline uses the public checkpoint [`PeterJinGo/SearchR1-nq_hotpotqa_train-qwen2.5-3b-it-em-ppo`](https://huggingface.co/PeterJinGo/SearchR1-nq_hotpotqa_train-qwen2.5-3b-it-em-ppo), which was trained on both NQ and HotpotQA. Our method (Group 4) was trained only on the NQ training set during the RL stage, making our strong performance even more significant despite the narrower RL data scope.
+
+### Analysis
+*   **Role of SFT**: SFT establishes the search-and-answer protocol. Models without this warm start (Baseline and RL Only) lag notably in EM, confirming that exploration alone cannot recover these priors efficiently.
+*   **Role of RL**: Stacking RL on top of SFT yields the most robust policy. RL fine-tuning sharpens the agent’s decision boundary on when to query or stop, adding **~4.7 EM points** over SFT alone.
 
 ## Installation
 
@@ -78,16 +108,22 @@ pip install uvicorn fastapi
 ## Quick Start (Reproduction)
 
 1.  **Launch Retriever**:
-    ```bash
-    conda activate retriever
-    bash retrieval_launch.sh
-    ```
+```bash
+conda activate retriever
+bash retrieval_launch.sh
+```
 
 2.  **Run RL Training**:
     Ensure you have the SFT checkpoint ready.
-    ```bash
-    conda activate searchr1
-    bash train_ppo.sh
+```bash
+conda activate searchr1
+bash train_ppo.sh
+```
+
+3.  **Run Evaluation**:
+```bash
+conda activate searchr1
+    bash run_nq_eval.sh
     ```
 
 ## Acknowledgements
@@ -103,4 +139,3 @@ This project is built upon [Search-R1](https://github.com/PeterGriffinJin/Search
   year={2025}
 }
 ```
-
