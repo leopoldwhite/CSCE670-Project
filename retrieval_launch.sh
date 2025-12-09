@@ -1,5 +1,6 @@
+export CUDA_VISIBLE_DEVICES=8,9
 
-file_path=/the/path/you/save/corpus
+file_path=./retrieval_corpus
 index_file=$file_path/e5_Flat.index
 corpus_file=$file_path/wiki-18.jsonl
 retriever_name=e5

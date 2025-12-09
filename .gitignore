@@ -7,6 +7,13 @@
 **/*.tar.gz
 **/playground
 **/wandb
+**/verl_checkpoints
+**/outputs
+**/data
+**/retrieval_corpus
+**/models
+**/docs
+**/example
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
